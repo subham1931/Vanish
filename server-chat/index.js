@@ -11,7 +11,7 @@ const app = express();
 const server = http.createServer(app);
 
 app.use(cors({
-  origin: ["http://localhost:5173", "http://localhost:5174"],
+  origin: [process.env.CLIENT_URL, "http://localhost:5173", "http://localhost:5174", "http://localhost:4173"].filter(Boolean),
   credentials: true
 }));
 app.use(express.json());
@@ -22,14 +22,14 @@ app.use("/api/friends", friendRouter);
 
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:5173", "http://localhost:5174"],
+    origin: [process.env.CLIENT_URL, "http://localhost:5173", "http://localhost:5174", "http://localhost:4173"].filter(Boolean),
     methods: ["GET", "POST"],
     credentials: true
   }
 });
 
-const PORT = 5000;
-const MONGO_URI = "mongodb://localhost:27017/chat-app";
+const PORT = process.env.PORT || 5000;
+const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/chat-app";
 
 mongoose.connect(MONGO_URI)
   .then(async () => {
