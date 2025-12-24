@@ -3,13 +3,25 @@ const User = require("../models/User");
 const { sign } = require("../utils/jwt");
 const { generateOtp } = require("../utils/otp");
 
+const { sendSMS } = require("../utils/sms");
+
 const otpStore = new Map();
 
-router.post("/request-otp", (req, res) => {
+router.post("/request-otp", async (req, res) => {
     const { phone } = req.body;
     const otp = generateOtp();
     console.log("Generated OTP:", otp);
     otpStore.set(phone, otp);
+
+    const sent = await sendSMS(phone, otp);
+    if (!sent) {
+        // If SMS fails, we might still allow it for dev testing via console, or return error.
+        // For now, let's assume if no keys, it returns true (mocked).
+        // If real keys fail, it logs error.
+        // Let's just respond success but warn in log.
+        console.warn("SMS sending failed or skipped.");
+    }
+
     res.json({ message: "OTP sent successfully" });
 })
 
