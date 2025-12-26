@@ -30,16 +30,16 @@ const io = new Server(server, {
 });
 
 const PORT = process.env.PORT || 5000;
-const MONGO_URI = process.env.MONGO_URI || "mongodb://localhost:27017/chat-app";
+const MONGO_URI = process.env.MONGO_URI;
 
 mongoose.connect(MONGO_URI)
   .then(async () => {
     console.log("MongoDB connected");
     try {
-      await mongoose.connection.collection("users").dropIndex("email_1");
-      console.log("Dropped email_1 index");
+      await mongoose.connection.collection("users").dropIndex("phone_1");
+      console.log("Dropped phone_1 index");
     } catch (e) {
-      // Index might not exist, which is fine
+      // Index might not exist
     }
   })
   .catch(err => console.error("MongoDB connection error:", err));

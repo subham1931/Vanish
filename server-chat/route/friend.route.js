@@ -5,6 +5,7 @@ const auth = require("../middlewares/auth");
 
 // Send Friend Request
 // Send Friend Request
+// Send Friend Request
 router.post("/send", auth, async (req, res) => {
     try {
         const { receiverId, identifier } = req.body;
@@ -16,10 +17,10 @@ router.post("/send", auth, async (req, res) => {
             targetUser = await User.findById(receiverId);
         } else if (identifier) {
             targetUser = await User.findOne({
-                $or: [{ phone: identifier }, { username: identifier }]
+                $or: [{ email: identifier.toLowerCase() }, { username: identifier }]
             });
         } else {
-            return res.status(400).json({ error: "Receiver ID or identifier (phone/username) required" });
+            return res.status(400).json({ error: "Receiver ID or identifier (email/username) required" });
         }
 
         if (!targetUser) return res.status(404).json({ error: "User not found" });
@@ -62,12 +63,13 @@ router.get("/pending", auth, async (req, res) => {
         const requests = await FriendRequest.find({
             receiver: req.user.userId,
             status: "pending"
-        }).populate("sender", "username phone avatar");
+        }).populate("sender", "username email avatar");
         res.json(requests);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
 });
+
 
 // Respond to Request (Accept/Reject)
 router.post("/respond", auth, async (req, res) => {
@@ -119,18 +121,18 @@ router.get("/search", auth, async (req, res) => {
         const { q } = req.query;
         if (!q) return res.json([]);
 
-        // Find users matching phone or username, excluding self
+        // Find users matching email or username, excluding self
         const users = await User.find({
             $and: [
                 { _id: { $ne: req.user.userId } },
                 {
                     $or: [
                         { username: { $regex: q, $options: "i" } },
-                        { phone: { $regex: q, $options: "i" } }
+                        { email: { $regex: q, $options: "i" } }
                     ]
                 }
             ]
-        }).select("username phone avatar");
+        }).select("username email avatar");
 
         res.json(users);
     } catch (err) {
@@ -141,7 +143,7 @@ router.get("/search", auth, async (req, res) => {
 // Get Friends List
 router.get("/list", auth, async (req, res) => {
     try {
-        const user = await User.findById(req.user.userId).populate("friends", "username phone avatar online lastSeen");
+        const user = await User.findById(req.user.userId).populate("friends", "username email avatar online lastSeen");
         res.json(user.friends);
     } catch (err) {
         res.status(500).json({ error: err.message });
