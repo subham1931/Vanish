@@ -2,6 +2,7 @@ const router = require("express").Router();
 const User = require("../models/User");
 const FriendRequest = require("../models/FriendRequest");
 const auth = require("../middlewares/auth");
+const redis = require("../lib/redis");
 
 // Send Friend Request
 // Send Friend Request
@@ -206,11 +207,23 @@ router.post("/cancel", auth, async (req, res) => {
     }
 });
 
+
+
 // Get Friends List
 router.get("/list", auth, async (req, res) => {
     try {
         const user = await User.findById(req.user.userId).populate("friends", "username email avatar online lastSeen");
-        res.json(user.friends);
+
+        const friends = user.friends.map(f => f.toObject());
+        const onlineUsers = await redis.smembers("online_users");
+        const onlineSet = new Set(onlineUsers);
+
+        const friendsWithStatus = friends.map(f => ({
+            ...f,
+            online: onlineSet.has(f._id.toString())
+        }));
+
+        res.json(friendsWithStatus);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }

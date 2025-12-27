@@ -13,6 +13,7 @@ const server = http.createServer(app);
 
 app.use(cors({
   origin: [process.env.CLIENT_URL, "http://localhost:5173", "http://localhost:5174", "http://localhost:4173"].filter(Boolean),
+  // origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:4173"],
   credentials: true
 }));
 app.use(express.json());
@@ -24,6 +25,7 @@ app.use("/api/friends", friendRouter);
 const io = new Server(server, {
   cors: {
     origin: [process.env.CLIENT_URL, "http://localhost:5173", "http://localhost:5174", "http://localhost:4173"].filter(Boolean),
+    // origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:4173"],
     methods: ["GET", "POST"],
     credentials: true
   }
@@ -50,6 +52,7 @@ mongoose.connect(MONGO_URI)
 
 const Message = require("./models/Message");
 const { verify } = require("./utils/jwt");
+const redis = require("./lib/redis"); // Import Redis
 
 io.use((socket, next) => {
   const token = socket.handshake.auth.token;
@@ -69,11 +72,16 @@ io.on("connection", async (socket) => {
   const userId = socket.user.userId;
   console.log("User connected", userId);
 
-  // Update online status
-  await User.findByIdAndUpdate(userId, { online: true });
-  socket.broadcast.emit("userOnline", userId);
+  // 1. Add current socket to user's socket list
+  await redis.sadd(`user:${userId}:sockets`, socket.id);
 
-  socket.join(userId);
+  // 2. Check if this is the first connection (user coming online)
+  // We check purely based on the fact we just added one. If the set size is 1, they are new.
+  const socketCount = await redis.scard(`user:${userId}:sockets`);
+  if (socketCount === 1) {
+    await redis.sadd("online_users", userId);
+    socket.broadcast.emit("userOnline", userId);
+  }
 
   // Send message
   socket.on("privateMessage", async ({ content, to }) => {
@@ -84,8 +92,17 @@ io.on("connection", async (socket) => {
         content
       });
 
-      io.to(to).emit("privateMessage", message);
-      socket.emit("privateMessage", message);
+      // Emit to Receiver's sockets (using Redis mapping)
+      const receiverSockets = await redis.smembers(`user:${to}:sockets`);
+      if (receiverSockets.length > 0) {
+        io.to(receiverSockets).emit("privateMessage", message);
+      }
+
+      // Emit to Sender's sockets (for multi-tab sync)
+      const senderSockets = await redis.smembers(`user:${userId}:sockets`);
+      if (senderSockets.length > 0) {
+        io.to(senderSockets).emit("privateMessage", message);
+      }
     } catch (err) {
       console.error(err);
     }
@@ -102,10 +119,34 @@ io.on("connection", async (socket) => {
     socket.emit("messagesLoaded", messages);
   });
 
+  // Typing indicators
+  socket.on("typing", async ({ to }) => {
+    const receiverSockets = await redis.smembers(`user:${to}:sockets`);
+    if (receiverSockets.length > 0) {
+      io.to(receiverSockets).emit("userTyping", { userId });
+    }
+  });
+
+  socket.on("stopTyping", async ({ to }) => {
+    const receiverSockets = await redis.smembers(`user:${to}:sockets`);
+    if (receiverSockets.length > 0) {
+      io.to(receiverSockets).emit("userStoppedTyping", { userId });
+    }
+  });
+
   socket.on("disconnect", async () => {
     console.log("User disconnected", userId);
-    await User.findByIdAndUpdate(userId, { online: false, lastSeen: new Date() });
-    socket.broadcast.emit("userOffline", userId);
+
+    // 1. Remove current socket from user's socket list
+    await redis.srem(`user:${userId}:sockets`, socket.id);
+
+    // 2. Check if user has no more open connections
+    const remainingSockets = await redis.scard(`user:${userId}:sockets`);
+    if (remainingSockets === 0) {
+      await redis.srem("online_users", userId);
+      await User.findByIdAndUpdate(userId, { lastSeen: new Date() });
+      socket.broadcast.emit("userOffline", userId);
+    }
   });
 });
 

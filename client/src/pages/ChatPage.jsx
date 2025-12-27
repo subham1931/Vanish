@@ -9,6 +9,20 @@ import { api } from '../lib/axios';
 import { motion, AnimatePresence } from 'framer-motion';
 import clsx from 'clsx';
 
+// Custom Hook for Debouncing
+const useDebounce = (value, delay) => {
+    const [debouncedValue, setDebouncedValue] = useState(value);
+
+    useEffect(() => {
+        const handler = setTimeout(() => {
+            setDebouncedValue(value);
+        }, delay);
+        return () => clearTimeout(handler);
+    }, [value, delay]);
+
+    return debouncedValue;
+};
+
 const ChatPage = () => {
     const navigate = useNavigate();
     const [message, setMessage] = useState("");
@@ -19,14 +33,23 @@ const ChatPage = () => {
     // Friend System State
     const [showAddFriend, setShowAddFriend] = useState(false);
     const [showRequests, setShowRequests] = useState(false);
+
+    // Add Friend Modal State
     const [searchQuery, setSearchQuery] = useState("");
     const [searchResults, setSearchResults] = useState([]);
+
+    // Sidebar Search State
+    const [chatSearch, setChatSearch] = useState("");
+
     const [pendingRequests, setPendingRequests] = useState([]);
     const [sentRequests, setSentRequests] = useState([]);
     const [friends, setFriends] = useState([]);
+    const [typingUsers, setTypingUsers] = useState({}); // { userId: boolean }
     const [loadingAction, setLoadingAction] = useState(null);
     const messagesEndRef = useRef(null);
+    const typingTimeoutRef = useRef(null);
 
+    // ... (rest of scrollToBottom, handleLogout)
     const scrollToBottom = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     };
@@ -41,6 +64,7 @@ const ChatPage = () => {
         navigate("/auth");
     };
 
+
     const fetchPendingRequests = async () => {
         try {
             const [pendingRes, sentRes] = await Promise.all([
@@ -54,27 +78,19 @@ const ChatPage = () => {
         }
     };
 
-    // ... handleRequestResponse function ...
-
     const handleCancelSentRequest = async (receiverId) => {
         try {
             await api.post("/friends/cancel", { receiverId });
-            // Refresh requests list
             fetchPendingRequests();
         } catch (err) {
             console.error(err);
         }
     };
 
-    // ...
-
     const fetchFriends = async () => {
         try {
             const res = await api.get("/friends/list");
             setFriends(res.data);
-            if (res.data.length === 0) {
-                // No auto-open
-            }
         } catch (err) {
             console.error("Failed to fetch friends", err);
         }
@@ -94,17 +110,12 @@ const ChatPage = () => {
         setLoadingAction(identifier);
         try {
             await api.post("/friends/send", { identifier });
-            // alert("Request Sent!"); // Optional
-
-            // Update local state to show "pending" status immediately
             setSearchResults(prev => prev.map(u => {
                 if (u.username === identifier || u.email === identifier) {
                     return { ...u, status: "pending" };
                 }
                 return u;
             }));
-
-            // setShowAddFriend(false); 
         } catch (err) {
             alert(err.response?.data?.error || "Failed to send request");
         } finally {
@@ -116,10 +127,9 @@ const ChatPage = () => {
         setLoadingAction(receiverId);
         try {
             await api.post("/friends/cancel", { receiverId });
-            // Update local state to show "Add" button again
             setSearchResults(prev => prev.map(u => {
                 if (u._id === receiverId) {
-                    return { ...u, status: "none" }; // or delete status
+                    return { ...u, status: "none" };
                 }
                 return u;
             }));
@@ -140,38 +150,62 @@ const ChatPage = () => {
         }
     };
 
+    const handleInputChange = (e) => {
+        setMessage(e.target.value);
+
+        if (selectedFriend) {
+            socket.emit("typing", { to: selectedFriend._id });
+
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+
+            typingTimeoutRef.current = setTimeout(() => {
+                socket.emit("stopTyping", { to: selectedFriend._id });
+            }, 2000);
+        }
+    };
+
+    const handleSubmit = (e) => {
+        e.preventDefault();
+        if (message.trim() && selectedFriend) {
+            socket.emit("privateMessage", {
+                content: message,
+                to: selectedFriend._id
+            });
+            socket.emit("stopTyping", { to: selectedFriend._id });
+            if (typingTimeoutRef.current) clearTimeout(typingTimeoutRef.current);
+            setMessage("");
+        }
+    }
+
+
+
+    // 1. Connection & Data Fetching Effect (Runs once)
     useEffect(() => {
         const userStr = localStorage.getItem("user");
         if (userStr) setCurrentUser(JSON.parse(userStr));
 
         const token = localStorage.getItem("token");
-        socket.auth = { token };
-        socket.connect();
+        if (token) {
+            socket.auth = { token };
+            socket.connect();
+        }
 
         fetchPendingRequests();
         fetchFriends();
 
-        // POLL for friend requests every 5 seconds
         const intervalId = setInterval(() => {
             fetchPendingRequests();
             fetchFriends();
         }, 5000);
 
-        // Initial check: If no friends, prompt to add one
-        // We need to wait for the first fetch to complete. 
-        // We can do this by checking friends state in a separate effect, 
-        // but to avoid flickering, let's do it after the initial fetch in the same scope if possible,
-        // or just use a flag.
+        return () => {
+            clearInterval(intervalId);
+            socket.disconnect();
+        };
+    }, []);
 
-        // For simplicity, let's add a one-time check in a separate useEffect or timeout
-        setTimeout(() => {
-            if (friends.length === 0) {
-                // setShowAddFriend(true); // Option A: Open Modal
-                // Option B: The user might mean "Show the sidebar" which is already shown.
-                // "Friend list tab" might technically refer to the "Add Friend" modal since the list is empty.
-            }
-        }, 1000);
-
+    // 2. Socket Event Listeners Effect (Runs when dependencies change)
+    useEffect(() => {
         const onPrivateMessage = (newMsg) => {
             setMessages((prev) => {
                 if (prev.some(m => m._id === newMsg._id)) return prev;
@@ -197,20 +231,31 @@ const ChatPage = () => {
             }
         };
 
+        const onUserTyping = ({ userId }) => {
+            setTypingUsers(prev => ({ ...prev, [userId]: true }));
+        };
+
+        const onUserStoppedTyping = ({ userId }) => {
+            setTypingUsers(prev => ({ ...prev, [userId]: false }));
+        };
+
         socket.on("messagesLoaded", onMessagesLoaded);
         socket.on("privateMessage", onPrivateMessage);
         socket.on("userOnline", onUserOnline);
         socket.on("userOffline", onUserOffline);
+        socket.on("userTyping", onUserTyping);
+        socket.on("userStoppedTyping", onUserStoppedTyping);
 
         return () => {
-            clearInterval(intervalId);
             socket.off("messagesLoaded", onMessagesLoaded);
             socket.off("privateMessage", onPrivateMessage);
             socket.off("userOnline", onUserOnline);
             socket.off("userOffline", onUserOffline);
-            socket.disconnect();
-        }
-    }, [])
+            socket.off("userTyping", onUserTyping);
+            socket.off("userStoppedTyping", onUserStoppedTyping);
+        };
+    }, [selectedFriend]);
+
 
     const handleSelectFriend = (friend) => {
         setSelectedFriend(friend);
@@ -219,16 +264,7 @@ const ChatPage = () => {
         setShowRequests(false);
     };
 
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        if (message.trim() && selectedFriend) {
-            socket.emit("privateMessage", {
-                content: message,
-                to: selectedFriend._id
-            });
-            setMessage("");
-        }
-    }
+
 
     return (
         <div className="h-[100dvh] bg-black text-white flex justify-center items-center p-0 md:p-6 overflow-hidden font-sans">
@@ -275,6 +311,8 @@ const ChatPage = () => {
                             <input
                                 type="text"
                                 placeholder="Search Chats"
+                                value={chatSearch}
+                                onChange={(e) => setChatSearch(e.target.value)}
                                 className="w-full bg-[#2a2a2a] text-white placeholder-zinc-500 pl-12 pr-4 py-3 rounded-full outline-none focus:ring-2 focus:ring-violet-600/50 transition-all border border-transparent focus:border-violet-500/30"
                             />
                         </div>
@@ -350,37 +388,60 @@ const ChatPage = () => {
                                         </button>
                                     </div>
                                 ) : (
-                                    friends.map((friend) => (
-                                        <div
-                                            key={friend._id}
-                                            onClick={() => handleSelectFriend(friend)}
-                                            className={clsx(
-                                                "flex items-center gap-4 p-4 rounded-3xl cursor-pointer transition-all duration-200 border border-transparent",
-                                                selectedFriend?._id === friend._id
-                                                    ? "bg-[#2a2a2a] border-white/5"
-                                                    : "hover:bg-[#2a2a2a]/50 hover:border-white/5"
+                                    <>
+                                        {/* Filtered Friends */}
+                                        {friends
+                                            .filter(f => f.username.toLowerCase().includes(chatSearch.toLowerCase()))
+                                            .map((friend) => (
+                                                <div
+                                                    key={friend._id}
+                                                    onClick={() => handleSelectFriend(friend)}
+                                                    className={clsx(
+                                                        "flex items-center gap-4 p-4 rounded-3xl cursor-pointer transition-all duration-200 border border-transparent",
+                                                        selectedFriend?._id === friend._id
+                                                            ? "bg-[#2a2a2a] border-white/5"
+                                                            : "hover:bg-[#2a2a2a]/50 hover:border-white/5"
+                                                    )}
+                                                >
+                                                    <div className="relative">
+                                                        <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-lg font-bold text-white shadow-lg">
+                                                            {friend.username?.[0]?.toUpperCase()}
+                                                        </div>
+                                                        {friend.online && (
+                                                            <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-[3px] border-[#1e1e1e] rounded-full"></span>
+                                                        )}
+                                                    </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex justify-between items-baseline mb-0.5">
+                                                            <h3 className="font-semibold text-white truncate">{friend.username}</h3>
+                                                        </div>
+                                                        <p className={clsx("text-sm truncate", typingUsers[friend._id] ? "text-violet-400 font-bold animate-pulse" : "text-zinc-400")}>
+                                                            {typingUsers[friend._id] ? "Typing..." : (friend.status || "Hey there! I am using Chat App.")}
+                                                        </p>
+                                                    </div>
+                                                </div>
+                                            ))}
+
+                                        {/* No Results Fallback */}
+                                        {chatSearch &&
+                                            friends.filter(f => f.username.toLowerCase().includes(chatSearch.toLowerCase())).length === 0 && (
+                                                <div className="flex flex-col items-center justify-center h-32 text-zinc-500 text-sm">
+                                                    No results found
+                                                </div>
                                             )}
-                                        >
-                                            <div className="relative">
-                                                <div className="w-12 h-12 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center text-lg font-bold text-white shadow-lg">
-                                                    {friend.username?.[0]?.toUpperCase()}
-                                                </div>
-                                                {friend.online && (
-                                                    <span className="absolute bottom-0 right-0 w-3.5 h-3.5 bg-emerald-500 border-[3px] border-[#1e1e1e] rounded-full"></span>
-                                                )}
+
+                                        {!chatSearch && friends.length === 0 && (
+                                            <div className="flex flex-col items-center justify-center h-48 text-zinc-500">
+                                                <p className="text-sm">No friends yet.</p>
+                                                <button
+                                                    onClick={() => setShowAddFriend(true)}
+                                                    className="mt-2 text-violet-400 hover:text-violet-300 text-xs font-bold"
+                                                >
+                                                    Add one now
+                                                </button>
                                             </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="flex justify-between items-baseline mb-0.5">
-                                                    <h3 className="font-semibold text-white truncate">{friend.username}</h3>
-                                                    {/* Placeholder time */}
-                                                    {/* <span className="text-[10px] text-zinc-500">11:00pm</span> */}
-                                                </div>
-                                                <p className="text-sm text-zinc-400 truncate">
-                                                    {friend.status || "Hey there! I am using Chat App."}
-                                                </p>
-                                            </div>
-                                        </div>
-                                    ))
+                                        )}
+                                    </>
                                 )}
                             </>
                         )}
@@ -412,22 +473,28 @@ const ChatPage = () => {
                     ) : (
                         <div className="flex flex-col h-full bg-[#0a0a0a] md:rounded-[30px] border-none md:border border-white/5 shadow-2xl overflow-hidden relative">
                             {/* Chat Header */}
-                            <div className="h-20 bg-[#1e1e1e]/80 backdrop-blur-md border-b border-white/5 flex items-center px-6 justify-between z-20">
-                                <div className="flex items-center gap-4">
-                                    <button onClick={() => setSelectedFriend(null)} className="md:hidden p-2 -ml-2 text-zinc-400 hover:text-white">
+                            <div className="h-16 md:h-20 bg-[#1e1e1e]/80 backdrop-blur-md border-b border-white/5 flex items-center px-4 md:px-6 justify-between z-20">
+                                <div className="flex items-center gap-3 md:gap-4">
+                                    <button onClick={() => setSelectedFriend(null)} className="md:hidden p-1 -ml-1 text-zinc-400 hover:text-white">
                                         <ArrowLeft className="w-6 h-6" />
                                     </button>
-                                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center font-bold text-white shadow-lg">
+                                    <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-gradient-to-br from-violet-500 to-fuchsia-500 flex items-center justify-center font-bold text-white shadow-lg">
                                         {selectedFriend.username?.[0]}
                                     </div>
                                     <div>
-                                        <h2 className="text-lg font-bold text-white leading-tight">{selectedFriend.username}</h2>
-                                        <p className="text-xs text-zinc-400">{selectedFriend.online ? "Online" : "Select for Contact info"}</p>
+                                        <h2 className="text-base md:text-lg font-bold text-white leading-tight">{selectedFriend.username}</h2>
+                                        <p className="text-xs text-zinc-400">
+                                            {typingUsers[selectedFriend._id] ? (
+                                                <span className="text-violet-400 font-bold animate-pulse">Typing...</span>
+                                            ) : (
+                                                selectedFriend.online ? "Online" : "Select for Contact info"
+                                            )}
+                                        </p>
                                     </div>
                                 </div>
 
-                                <div className="flex items-center gap-4 text-zinc-400">
-                                    <Search className="w-5 h-5 hover:text-white cursor-pointer transition-colors" />
+                                <div className="flex items-center gap-3 md:gap-4 text-zinc-400">
+                                    <Search className="w-5 h-5 hover:text-white cursor-pointer transition-colors hidden md:block" />
                                     <Phone className="w-5 h-5 hover:text-white cursor-pointer transition-colors" />
                                     <Video className="w-6 h-6 hover:text-white cursor-pointer transition-colors" />
                                     <MoreVertical className="w-5 h-5 hover:text-white cursor-pointer transition-colors" />
@@ -441,11 +508,11 @@ const ChatPage = () => {
                                     const isLastFromUser = index === messages.length - 1 || messages[index + 1]?.sender !== msg.sender;
 
                                     return (
-                                        <div key={index} className={clsx("flex gap-4 max-w-[85%] md:max-w-[70%]", isMe ? "ml-auto flex-row-reverse" : "")}>
+                                        <div key={index} className={clsx("flex gap-3 md:gap-4 max-w-[85%] md:max-w-[70%]", isMe ? "ml-auto flex-row-reverse" : "")}>
                                             {/* Avatar next to message bubble */}
                                             <div className={clsx("flex-shrink-0 self-end", !isLastFromUser && "opacity-0")}>
                                                 <div className={clsx(
-                                                    "w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm",
+                                                    "w-6 h-6 md:w-8 md:h-8 rounded-full flex items-center justify-center text-[10px] md:text-xs font-bold text-white shadow-sm",
                                                     isMe ? "bg-violet-600" : "bg-gradient-to-br from-violet-500 to-fuchsia-500"
                                                 )}>
                                                     {isMe ? currentUser?.username?.[0] : selectedFriend.username?.[0]}
@@ -454,7 +521,7 @@ const ChatPage = () => {
 
                                             <div className={clsx("flex flex-col", isMe ? "items-end" : "items-start")}>
                                                 <div className={clsx(
-                                                    "px-6 py-3.5 shadow-sm text-[15px] leading-relaxed break-words",
+                                                    "px-4 py-2 md:px-6 md:py-3.5 shadow-sm text-sm md:text-[15px] leading-relaxed break-words",
                                                     isMe
                                                         ? "bg-violet-600 text-white rounded-2xl rounded-tr-sm shadow-violet-900/20"
                                                         : "bg-[#2a2a2a] text-zinc-200 rounded-2xl rounded-tl-sm shadow-black/20"
@@ -472,31 +539,31 @@ const ChatPage = () => {
                             </div>
 
                             {/* Input Area */}
-                            <div className="p-4 md:p-6 bg-[#0a0a0a] relative z-20">
+                            <div className="p-3 md:p-6 bg-[#0a0a0a] relative z-20">
                                 <form
                                     onSubmit={handleSubmit}
-                                    className="bg-[#1e1e1e] rounded-full p-2 pl-6 pr-2 shadow-2xl border border-white/5 flex items-center gap-4"
+                                    className="bg-[#1e1e1e] rounded-full p-1.5 pl-4 pr-1.5 md:p-2 md:pl-6 md:pr-2 shadow-2xl border border-white/5 flex items-center gap-2 md:gap-4"
                                 >
                                     <input
                                         type="text"
                                         value={message}
-                                        onChange={(e) => setMessage(e.target.value)}
+                                        onChange={handleInputChange}
                                         placeholder="Write your message...."
-                                        className="flex-1 bg-transparent text-white placeholder-zinc-500 outline-none h-full py-2"
+                                        className="flex-1 bg-transparent text-white placeholder-zinc-500 outline-none h-full py-2 text-sm md:text-base"
                                     />
 
-                                    <div className="flex items-center gap-3 text-zinc-400 px-2 border-r border-zinc-700/50 pr-4">
-                                        <Paperclip className="w-5 h-5 hover:text-white cursor-pointer transition-colors" />
+                                    <div className="flex items-center gap-2 md:gap-3 text-zinc-400 px-1 md:px-2 border-none md:border-r border-zinc-700/50 pr-2 md:pr-4">
+                                        <Paperclip className="w-5 h-5 hover:text-white cursor-pointer transition-colors hidden md:block" />
                                         <ImageIcon className="w-5 h-5 hover:text-white cursor-pointer transition-colors" />
-                                        <Smile className="w-5 h-5 hover:text-white cursor-pointer transition-colors" />
+                                        <Smile className="w-5 h-5 hover:text-white cursor-pointer transition-colors hidden md:block" />
                                     </div>
 
                                     <button
                                         type="submit"
                                         disabled={!message.trim()}
-                                        className="bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-violet-500 text-white p-3 rounded-full transition-all shadow-lg shadow-violet-900/20 active:scale-95"
+                                        className="bg-violet-600 disabled:opacity-50 disabled:cursor-not-allowed hover:bg-violet-500 text-white p-2 md:p-3 rounded-full transition-all shadow-lg shadow-violet-900/20 active:scale-95 flex-shrink-0"
                                     >
-                                        <Send className="w-5 h-5 ml-0.5" />
+                                        <Send className="w-4 h-4 md:w-5 md:h-5 ml-0.5" />
                                     </button>
                                 </form>
                             </div>
