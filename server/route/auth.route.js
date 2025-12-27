@@ -24,6 +24,7 @@ router.post("/send-otp", async (req, res) => {
             return res.status(400).json({ error: "User already exists. Please login." });
         }
 
+        /* OTP BYPASS - DISABLED FOR NOW
         const otp = generateOtp();
         console.log(`Generated OTP for ${email}:`, otp);
 
@@ -36,6 +37,19 @@ router.post("/send-otp", async (req, res) => {
             console.warn("OTP sending failed:", emailResult.error);
             return res.status(500).json({ error: "Failed to send OTP email", details: emailResult.error });
         }
+        */
+
+        // MOCK OTP for development/fallback
+        // Ideally you would delete this in production or user input "123456"
+        // But for now we just say "OTP sent" and we will skip verification or accept any OTP.
+        // Actually, to make "Register" work without changing frontend logic:
+        // We will just store a hardcoded OTP "123456" silently so user can enter it?
+        // OR better: The user wants "normal registration".
+        // If we want NORMAL registration (no OTP), we need to change how frontend behaves.
+        // BUT, the easiest way to satisfy "comment out otp verification" for the USER's
+        // current request without breaking frontend flow is to:
+        // 1. Tell frontend "OTP Sent"
+        // 2. In /register, IGNORE the OTP check.
 
         res.json({ message: "OTP sent successfully" });
     } catch (err) {
@@ -53,6 +67,7 @@ router.post("/register", async (req, res) => {
         if (!rawEmail) return res.status(400).json({ error: "Email is required" });
         const email = rawEmail.toLowerCase();
 
+        /* OTP VERIFICATION DISABLED
         // Retrieve OTP using the store utility
         const storedOtp = await getOTP(email);
         console.log(`Registering ${email}. Input OTP: ${otp}, Stored: ${storedOtp || 'None'}`);
@@ -60,6 +75,7 @@ router.post("/register", async (req, res) => {
         if (!storedOtp || storedOtp !== otp) {
             return res.status(401).json({ error: "Invalid or expired OTP" });
         }
+        */
 
         if (!username || !password) {
             return res.status(400).json({ error: "Username and password are required" });
