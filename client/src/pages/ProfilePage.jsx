@@ -53,9 +53,7 @@ const ProfilePage = () => {
                 data.append("avatar", selectedFile);
             }
 
-            const res = await api.put("/auth/update-profile", data, {
-                headers: { "Content-Type": "multipart/form-data" }
-            });
+            const res = await api.put("/auth/update-profile", data);
             const updatedUser = { ...user, ...res.data.user };
 
             // Update local state and storage
