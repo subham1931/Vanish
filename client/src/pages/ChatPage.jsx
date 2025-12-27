@@ -521,7 +521,7 @@ const ChatPage = () => {
 
                                             <div className={clsx("flex flex-col", isMe ? "items-end" : "items-start")}>
                                                 <div className={clsx(
-                                                    "px-4 py-2 md:px-6 md:py-3.5 shadow-sm text-sm md:text-[15px] leading-relaxed break-words",
+                                                    "px-4 py-2 md:px-6 md:py-3.5 shadow-sm text-sm md:text-[15px] leading-relaxed break-all",
                                                     isMe
                                                         ? "bg-violet-600 text-white rounded-2xl rounded-tr-sm shadow-violet-900/20"
                                                         : "bg-[#2a2a2a] text-zinc-200 rounded-2xl rounded-tl-sm shadow-black/20"
@@ -646,7 +646,7 @@ const ChatPage = () => {
                     </div>
                 )}
             </AnimatePresence>
-        </div>
+        </div >
     )
 }
 
