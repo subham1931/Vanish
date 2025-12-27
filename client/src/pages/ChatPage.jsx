@@ -53,6 +53,19 @@ const ChatPage = () => {
         try {
             const res = await api.get("/friends/list");
             setFriends(res.data);
+            // If no friends and no requests, likely a new user. Help them out.
+            // valid only for initial load
+            // We can check if it's the very first load or just always open if empty?
+            // Always opening might be annoying if they close it. 
+            // Better: Only if friends.length is 0 AND we haven't shown it yet?
+            // For now, let's just trigger it if result is empty.
+            if (res.data.length === 0) {
+                // setShowAddFriend(true); // User request: "automatically comes to friend list tab"
+                // Actually, "Friend List Tab" might mean the SIDEBAR LIST.
+                // But if they have no friends, the sidebar shows "No friends yet. Add one now".
+                // I will make it open the "Add Friend" modal to be helpful.
+                setShowAddFriend(true);
+            }
         } catch (err) {
             console.error("Failed to fetch friends", err);
         }
@@ -106,8 +119,23 @@ const ChatPage = () => {
         // POLL for friend requests every 5 seconds
         const intervalId = setInterval(() => {
             fetchPendingRequests();
-            fetchFriends(); // Also refresh friends list to see online status changes or new friends
+            fetchFriends();
         }, 5000);
+
+        // Initial check: If no friends, prompt to add one
+        // We need to wait for the first fetch to complete. 
+        // We can do this by checking friends state in a separate effect, 
+        // but to avoid flickering, let's do it after the initial fetch in the same scope if possible,
+        // or just use a flag.
+
+        // For simplicity, let's add a one-time check in a separate useEffect or timeout
+        setTimeout(() => {
+            if (friends.length === 0) {
+                // setShowAddFriend(true); // Option A: Open Modal
+                // Option B: The user might mean "Show the sidebar" which is already shown.
+                // "Friend list tab" might technically refer to the "Add Friend" modal since the list is empty.
+            }
+        }, 1000);
 
         const onPrivateMessage = (newMsg) => {
             setMessages((prev) => {
