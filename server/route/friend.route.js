@@ -65,6 +65,20 @@ router.get("/pending", auth, async (req, res) => {
     }
 });
 
+// Get Sent Requests
+router.get("/sent", auth, async (req, res) => {
+    try {
+        // Find users where MY id is in THEIR friendRequests array
+        const users = await User.find({
+            friendRequests: req.user.userId
+        }).select("username email avatar");
+
+        res.json(users);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
 
 // Respond to Request (Accept/Reject)
 router.post("/respond", auth, async (req, res) => {

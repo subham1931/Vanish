@@ -22,45 +22,44 @@ const ChatPage = () => {
     const [searchQuery, setSearchQuery] = useState("");
     const [searchResults, setSearchResults] = useState([]);
     const [pendingRequests, setPendingRequests] = useState([]);
+    const [sentRequests, setSentRequests] = useState([]);
     const [friends, setFriends] = useState([]);
-    const [loadingAction, setLoadingAction] = useState(null);
-    const messagesEndRef = useRef(null);
 
-    const scrollToBottom = () => {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-    };
-
-    useEffect(() => {
-        scrollToBottom();
-    }, [messages]);
-
-    const handleLogout = () => {
-        localStorage.removeItem("token");
-        localStorage.removeItem("user");
-        navigate("/auth");
-    };
+    // ...
 
     const fetchPendingRequests = async () => {
         try {
-            const res = await api.get("/friends/pending");
-            setPendingRequests(res.data);
+            const [pendingRes, sentRes] = await Promise.all([
+                api.get("/friends/pending"),
+                api.get("/friends/sent")
+            ]);
+            setPendingRequests(pendingRes.data);
+            setSentRequests(sentRes.data);
         } catch (err) {
             console.error("Failed to fetch requests", err);
         }
     };
 
+    // ... handleRequestResponse function ...
+
+    const handleCancelSentRequest = async (receiverId) => {
+        try {
+            await api.post("/friends/cancel", { receiverId });
+            // Refresh requests list
+            fetchPendingRequests();
+        } catch (err) {
+            console.error(err);
+        }
+    };
+
+    // ...
+
     const fetchFriends = async () => {
         try {
             const res = await api.get("/friends/list");
             setFriends(res.data);
-            // If no friends and no requests, likely a new user. Help them out.
-            // valid only for initial load
-            // We can check if it's the very first load or just always open if empty?
-            // Always opening might be annoying if they close it. 
-            // Better: Only if friends.length is 0 AND we haven't shown it yet?
-            // For now, let's just trigger it if result is empty.
             if (res.data.length === 0) {
-                // setShowAddFriend(true); 
+                // No auto-open
             }
         } catch (err) {
             console.error("Failed to fetch friends", err);
@@ -271,29 +270,57 @@ const ChatPage = () => {
                     <div className="flex-1 overflow-y-auto px-3 py-2 space-y-1 custom-scrollbar">
                         {showRequests ? (
                             <div className="px-3">
-                                <h3 className="text-xs font-bold text-zinc-500 uppercase mb-3 px-1">Friend Requests</h3>
-                                {pendingRequests.length === 0 ? (
+                                {/* Received Requests */}
+                                {pendingRequests.length > 0 && (
+                                    <>
+                                        <h3 className="text-xs font-bold text-zinc-500 uppercase mb-3 px-1">Received Requests</h3>
+                                        {pendingRequests.map(req => (
+                                            <div key={req._id} className="bg-[#2a2a2a] p-4 rounded-3xl mb-3">
+                                                <div className="flex items-center gap-3 mb-3">
+                                                    <div className="w-10 h-10 rounded-full bg-violet-600 flex items-center justify-center font-bold">
+                                                        {req.username?.[0] || "?"}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-semibold text-sm">{req.username}</p>
+                                                        <p className="text-xs text-zinc-400">{req.email}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => handleRequestResponse(req._id, "accept")} className="flex-1 bg-violet-600 hover:bg-violet-700 py-2 rounded-xl text-xs font-bold transition-colors">Accept</button>
+                                                    <button onClick={() => handleRequestResponse(req._id, "reject")} className="flex-1 bg-[#3a3a3a] hover:bg-[#4a4a4a] py-2 rounded-xl text-xs font-bold transition-colors">Reject</button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
+
+                                {/* Sent Requests */}
+                                {sentRequests.length > 0 && (
+                                    <>
+                                        <h3 className="text-xs font-bold text-zinc-500 uppercase mb-3 px-1 mt-6">Sent Requests</h3>
+                                        {sentRequests.map(req => (
+                                            <div key={req._id} className="bg-[#2a2a2a] p-4 rounded-3xl mb-3">
+                                                <div className="flex items-center gap-3 mb-3">
+                                                    <div className="w-10 h-10 rounded-full bg-zinc-700 flex items-center justify-center font-bold">
+                                                        {req.username?.[0] || "?"}
+                                                    </div>
+                                                    <div>
+                                                        <p className="font-semibold text-sm">{req.username}</p>
+                                                        <p className="text-xs text-zinc-400">{req.email}</p>
+                                                    </div>
+                                                </div>
+                                                <button onClick={() => handleCancelSentRequest(req._id)} className="w-full bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white py-2 rounded-xl text-xs font-bold transition-colors">
+                                                    Cancel Request
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </>
+                                )}
+
+                                {pendingRequests.length === 0 && sentRequests.length === 0 && (
                                     <div className="flex flex-col items-center justify-center h-48 text-zinc-500 text-sm">
-                                        No pending requests
+                                        No active requests
                                     </div>
-                                ) : (
-                                    pendingRequests.map(req => (
-                                        <div key={req._id} className="bg-[#2a2a2a] p-4 rounded-3xl mb-3">
-                                            <div className="flex items-center gap-3 mb-3">
-                                                <div className="w-10 h-10 rounded-full bg-violet-600 flex items-center justify-center font-bold">
-                                                    {req.username?.[0] || "?"}
-                                                </div>
-                                                <div>
-                                                    <p className="font-semibold text-sm">{req.username}</p>
-                                                    <p className="text-xs text-zinc-400">{req.email}</p>
-                                                </div>
-                                            </div>
-                                            <div className="flex gap-2">
-                                                <button onClick={() => handleRequestResponse(req._id, "accept")} className="flex-1 bg-violet-600 hover:bg-violet-700 py-2 rounded-xl text-xs font-bold transition-colors">Accept</button>
-                                                <button onClick={() => handleRequestResponse(req._id, "reject")} className="flex-1 bg-[#3a3a3a] hover:bg-[#4a4a4a] py-2 rounded-xl text-xs font-bold transition-colors">Reject</button>
-                                            </div>
-                                        </div>
-                                    ))
                                 )}
                             </div>
                         ) : (
