@@ -11,8 +11,11 @@ const friendRouter = require("./route/friend.route");
 const app = express();
 const server = http.createServer(app);
 
+const allowedOrigins = [process.env.CLIENT_URL, "http://localhost:5173", "http://localhost:5174", "http://localhost:4173"].filter(Boolean);
+console.log("Allowed Origins:", allowedOrigins);
+
 app.use(cors({
-  origin: [process.env.CLIENT_URL, "http://localhost:5173", "http://localhost:5174", "http://localhost:4173"].filter(Boolean),
+  origin: allowedOrigins,
   // origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:4173"],
   credentials: true
 }));
@@ -24,7 +27,7 @@ app.use("/api/friends", friendRouter);
 
 const io = new Server(server, {
   cors: {
-    origin: [process.env.CLIENT_URL, "http://localhost:5173", "http://localhost:5174", "http://localhost:4173"].filter(Boolean),
+    origin: allowedOrigins,
     // origin: ["http://localhost:5173", "http://localhost:5174", "http://localhost:4173"],
     methods: ["GET", "POST"],
     credentials: true
