@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef } from 'react'
 import {
     MessageSquare, Send, LogOut, UserPlus, Users, Check, X, Search, Bell,
-    ArrowLeft, User, Phone, Video, MoreVertical, Paperclip, Image as ImageIcon, Smile
+    ArrowLeft, User, Phone, Video, MoreVertical, Paperclip, Image as ImageIcon, Smile, Loader2
 } from 'lucide-react';
 import socket from '../socket';
 import { useNavigate } from 'react-router-dom';
@@ -44,6 +44,7 @@ const ChatPage = () => {
     const [pendingRequests, setPendingRequests] = useState([]);
     const [sentRequests, setSentRequests] = useState([]);
     const [friends, setFriends] = useState([]);
+    const [isLoadingFriends, setIsLoadingFriends] = useState(true);
     const [typingUsers, setTypingUsers] = useState({}); // { userId: boolean }
     const [loadingAction, setLoadingAction] = useState(null);
     const messagesEndRef = useRef(null);
@@ -93,6 +94,8 @@ const ChatPage = () => {
             setFriends(res.data);
         } catch (err) {
             console.error("Failed to fetch friends", err);
+        } finally {
+            setIsLoadingFriends(false);
         }
     };
 
@@ -227,9 +230,10 @@ const ChatPage = () => {
         };
 
         const onUserOffline = (userId) => {
-            setFriends(prev => prev.map(f => f._id === userId ? { ...f, online: false } : f));
+            const now = new Date().toISOString();
+            setFriends(prev => prev.map(f => f._id === userId ? { ...f, online: false, lastSeen: now } : f));
             if (selectedFriend && selectedFriend._id === userId) {
-                setSelectedFriend(prev => ({ ...prev, online: false }));
+                setSelectedFriend(prev => ({ ...prev, online: false, lastSeen: now }));
             }
         };
 
@@ -379,7 +383,12 @@ const ChatPage = () => {
                             </div>
                         ) : (
                             <>
-                                {friends.length === 0 ? (
+                                {isLoadingFriends ? (
+                                    <div className="flex flex-col items-center justify-center h-48 text-zinc-500">
+                                        <Loader2 className="w-8 h-8 animate-spin text-violet-500" />
+                                        <p className="text-xs mt-2">Loading chats...</p>
+                                    </div>
+                                ) : friends.length === 0 ? (
                                     <div className="flex flex-col items-center justify-center h-48 text-zinc-500">
                                         <p className="text-sm">No friends yet.</p>
                                         <button
@@ -489,7 +498,11 @@ const ChatPage = () => {
                                             {typingUsers[selectedFriend._id] ? (
                                                 <span className="text-violet-400 font-bold animate-pulse">Typing...</span>
                                             ) : (
-                                                selectedFriend.online ? "Online" : "Select for Contact info"
+                                                selectedFriend.online
+                                                    ? "Online"
+                                                    : selectedFriend.lastSeen
+                                                        ? `Last seen ${new Date(selectedFriend.lastSeen).toLocaleString([], { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' })}`
+                                                        : "Offline"
                                             )}
                                         </p>
                                     </div>
