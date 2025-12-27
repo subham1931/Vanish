@@ -435,6 +435,11 @@ const ChatPage = () => {
                                         {/* Filtered Friends */}
                                         {friends
                                             .filter(f => f.username.toLowerCase().includes(chatSearch.toLowerCase()))
+                                            .sort((a, b) => {
+                                                const timeA = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : 0;
+                                                const timeB = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
+                                                return timeB - timeA;
+                                            })
                                             .map((friend) => (
                                                 <div
                                                     key={friend._id}

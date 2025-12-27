@@ -251,6 +251,13 @@ router.get("/list", auth, async (req, res) => {
             };
         }));
 
+        // Sort by last message date
+        friendsWithStatus.sort((a, b) => {
+            const timeA = a.lastMessage ? new Date(a.lastMessage.createdAt).getTime() : 0;
+            const timeB = b.lastMessage ? new Date(b.lastMessage.createdAt).getTime() : 0;
+            return timeB - timeA;
+        });
+
         res.json(friendsWithStatus);
     } catch (err) {
         res.status(500).json({ error: err.message });
