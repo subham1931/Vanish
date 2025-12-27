@@ -259,11 +259,11 @@ const ChatPage = () => {
                                         <div key={req._id} className="bg-[#2a2a2a] p-4 rounded-3xl mb-3">
                                             <div className="flex items-center gap-3 mb-3">
                                                 <div className="w-10 h-10 rounded-full bg-violet-600 flex items-center justify-center font-bold">
-                                                    {req.sender?.username?.[0] || "?"}
+                                                    {req.username?.[0] || "?"}
                                                 </div>
                                                 <div>
-                                                    <p className="font-semibold text-sm">{req.sender?.username}</p>
-                                                    <p className="text-xs text-zinc-400">{req.sender?.email}</p>
+                                                    <p className="font-semibold text-sm">{req.username}</p>
+                                                    <p className="text-xs text-zinc-400">{req.email}</p>
                                                 </div>
                                             </div>
                                             <div className="flex gap-2">

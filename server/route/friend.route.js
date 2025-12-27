@@ -6,6 +6,7 @@ const auth = require("../middlewares/auth");
 // Send Friend Request
 // Send Friend Request
 // Send Friend Request
+// Send Friend Request
 router.post("/send", auth, async (req, res) => {
     try {
         const { receiverId, identifier } = req.body;
@@ -29,30 +30,24 @@ router.post("/send", auth, async (req, res) => {
 
         if (senderId === targetId) return res.status(400).json({ error: "Cannot send request to yourself" });
 
-        // Check availability
-        const existingRequest = await FriendRequest.findOne({
-            $or: [
-                { sender: senderId, receiver: targetId },
-                { sender: targetId, receiver: senderId }
-            ]
-        });
-
-        if (existingRequest) {
-            if (existingRequest.status === "pending") return res.status(400).json({ error: "Request already pending" });
-            if (existingRequest.status === "accepted") return res.status(400).json({ error: "Already friends" });
-            return res.status(400).json({ error: "Request interaction already exists" });
-        }
-
-        // Check if already friends in User model (double check)
-        const senderUser = await User.findById(senderId);
-        if (senderUser.friends.includes(targetId)) {
+        // Check if already friends
+        if (targetUser.friends.includes(senderId)) {
             return res.status(400).json({ error: "Already friends" });
         }
 
-        const newRequest = await FriendRequest.create({ sender: senderId, receiver: targetId });
-        res.json({ message: "Friend request sent", request: newRequest });
+        // Check if request already sent (is senderId in target's friendRequests?)
+        if (targetUser.friendRequests.includes(senderId)) {
+            return res.status(400).json({ error: "Request already sent/pending" });
+        }
+
+        // Add senderId to target's friendRequests
+        targetUser.friendRequests.push(senderId);
+        await targetUser.save();
+
+        res.json({ message: "Friend request sent" });
 
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: err.message });
     }
 });
@@ -60,11 +55,11 @@ router.post("/send", auth, async (req, res) => {
 // Get Pending Requests (Received)
 router.get("/pending", auth, async (req, res) => {
     try {
-        const requests = await FriendRequest.find({
-            receiver: req.user.userId,
-            status: "pending"
-        }).populate("sender", "username email avatar");
-        res.json(requests);
+        const user = await User.findById(req.user.userId)
+            .populate("friendRequests", "username email avatar");
+
+        // Return the populated users who sent the requests
+        res.json(user.friendRequests || []);
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
@@ -74,49 +69,56 @@ router.get("/pending", auth, async (req, res) => {
 // Respond to Request (Accept/Reject)
 router.post("/respond", auth, async (req, res) => {
     try {
-        const { requestId, action } = req.body; // action: 'accept' or 'reject'
-        const userId = req.user.userId;
+        // requestId is actually the Sender's User ID here
+        const { requestId: senderIdToActOn, action } = req.body;
+        const currentUserId = req.user.userId;
 
-        const request = await FriendRequest.findById(requestId);
-        if (!request) return res.status(404).json({ error: "Request not found" });
+        if (!senderIdToActOn) return res.status(400).json({ error: "Request ID (Sender ID) required" });
 
-        if (request.receiver.toString() !== userId) return res.status(403).json({ error: "Not authorized" });
-        if (request.status !== "pending") return res.status(400).json({ error: "Request already handled" });
+        const currentUser = await User.findById(currentUserId);
+
+        // Check if the request actually exists
+        if (!currentUser.friendRequests.includes(senderIdToActOn)) {
+            return res.status(404).json({ error: "Friend request not found" });
+        }
 
         if (action === "accept") {
-            request.status = "accepted";
-            await request.save();
-
             // Add to friends list for both
-            await User.findByIdAndUpdate(request.sender, { $addToSet: { friends: request.receiver } });
-            await User.findByIdAndUpdate(request.receiver, { $addToSet: { friends: request.sender } });
+            // 1. Add sender to current user's friends
+            if (!currentUser.friends.includes(senderIdToActOn)) {
+                currentUser.friends.push(senderIdToActOn);
+            }
+            // 2. Remove from friendRequests
+            currentUser.friendRequests = currentUser.friendRequests.filter(id => id.toString() !== senderIdToActOn);
+            await currentUser.save();
+
+            // 3. Add current user to sender's friends using update (to avoid fetching sender doc if possible, or fetch safe)
+            await User.findByIdAndUpdate(senderIdToActOn, {
+                $addToSet: { friends: currentUserId },
+                // Also ensure we aren't in their requests (rare edge case of double request)
+                $pull: { friendRequests: currentUserId }
+            });
 
             res.json({ message: "Friend request accepted" });
+
         } else if (action === "reject") {
-            // Option A: Set status to rejected
-            // request.status = "rejected"; 
-            // await request.save();
+            // Remove from friendRequests
+            currentUser.friendRequests = currentUser.friendRequests.filter(id => id.toString() !== senderIdToActOn);
+            await currentUser.save();
 
-            // Option B: Delete the request so they can request again later? 
-            // Prompt says "rejestc", usually implies keeping state or just deleting. 
-            // Let's delete it so it disappears from the list, or keep it as rejected. 
-            // "rejestc" -> usually means it's gone from pending.
-
-            // I will delete the document for simplicity so they can request again if it was a mistake, 
-            // OR I can keep it. The user didn't specify. I'll delete it to keep db clean.
-            await FriendRequest.findByIdAndDelete(requestId);
             res.json({ message: "Friend request rejected" });
         } else {
             res.status(400).json({ error: "Invalid action" });
         }
 
     } catch (err) {
+        console.error(err);
         res.status(500).json({ error: err.message });
     }
 });
 
 // Search Users to friend
-router.get("/search", auth, async (req, res) => {
+router.get("/search", auth, async (req, res) => { // No changes needed here, just kept for context if needed or simple replace
     try {
         const { q } = req.query;
         if (!q) return res.json([]);

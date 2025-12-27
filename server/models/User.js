@@ -10,6 +10,7 @@ const userSchema = new mongoose.Schema({
     online: { type: Boolean },
     lastSeen: { type: Date },
     friends: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
+    friendRequests: [{ type: mongoose.Schema.Types.ObjectId, ref: "User" }],
 
 })
 
