@@ -502,7 +502,7 @@ const ChatPage = () => {
                             </div>
 
                             {/* Messages Area */}
-                            <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-6">
+                            <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-6 no-scrollbar">
                                 {messages.map((msg, index) => {
                                     const isMe = msg.sender === currentUser?._id;
                                     const isLastFromUser = index === messages.length - 1 || messages[index + 1]?.sender !== msg.sender;
