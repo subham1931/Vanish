@@ -119,7 +119,23 @@ io.on("connection", async (socket) => {
         { sender: withUserId, receiver: userId }
       ]
     }).sort({ createdAt: 1 });
+
+    // Mark messages as read when loading history
+    await Message.updateMany(
+      { sender: withUserId, receiver: userId, read: false },
+      { $set: { read: true } }
+    );
+
     socket.emit("messagesLoaded", messages);
+  });
+
+  // Mark specific conversation as read
+  socket.on("markRead", async ({ fromUserId }) => {
+    await Message.updateMany(
+      { sender: fromUserId, receiver: userId, read: false },
+      { $set: { read: true } }
+    );
+    // Optionally notify the sender if needed for read receipts
   });
 
   // Typing indicators

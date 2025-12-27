@@ -209,18 +209,46 @@ router.post("/cancel", auth, async (req, res) => {
 
 
 
+const Message = require("../models/Message");
+
 // Get Friends List
 router.get("/list", auth, async (req, res) => {
     try {
         const user = await User.findById(req.user.userId).populate("friends", "username email avatar online lastSeen");
+        const currentUserId = req.user.userId;
 
-        const friends = user.friends.map(f => f.toObject());
         const onlineUsers = await redis.smembers("online_users");
         const onlineSet = new Set(onlineUsers);
 
-        const friendsWithStatus = friends.map(f => ({
-            ...f,
-            online: onlineSet.has(f._id.toString())
+        // Fetch last message and unread count for each friend
+        const friendsWithStatus = await Promise.all(user.friends.map(async (f) => {
+            const friendObj = f.toObject();
+
+            // Last message in this conversation
+            const lastMsg = await Message.findOne({
+                $or: [
+                    { sender: currentUserId, receiver: f._id },
+                    { sender: f._id, receiver: currentUserId }
+                ]
+            }).sort({ createdAt: -1 });
+
+            // Unread messages from THIS friend to ME
+            const unreadCount = await Message.countDocuments({
+                sender: f._id,
+                receiver: currentUserId,
+                read: false
+            });
+
+            return {
+                ...friendObj,
+                online: onlineSet.has(f._id.toString()),
+                lastMessage: lastMsg ? {
+                    content: lastMsg.content,
+                    createdAt: lastMsg.createdAt,
+                    sender: lastMsg.sender
+                } : null,
+                unreadCount
+            };
         }));
 
         res.json(friendsWithStatus);

@@ -210,12 +210,39 @@ const ChatPage = () => {
     // 2. Socket Event Listeners Effect (Runs when dependencies change)
     useEffect(() => {
         const onPrivateMessage = (newMsg) => {
-            if (selectedFriend && (newMsg.sender === selectedFriend._id || newMsg.receiver === selectedFriend._id)) {
+            // Update messages if chat is open with this user
+            const isChattingWithSender = selectedFriend && (newMsg.sender === selectedFriend._id || newMsg.receiver === selectedFriend._id);
+
+            if (isChattingWithSender) {
                 setMessages((prev) => {
                     if (prev.some(m => m._id === newMsg._id)) return prev;
                     return [...prev, newMsg];
                 });
+                // If we are currently chatting with them, mark as read immediately
+                if (newMsg.sender !== currentUser?._id) {
+                    socket.emit("markRead", { fromUserId: newMsg.sender });
+                }
             }
+
+            // Update friends list sidebar in real-time
+            setFriends(prev => prev.map(f => {
+                const isRelevant = f._id === newMsg.sender || f._id === newMsg.receiver;
+                if (!isRelevant) return f;
+
+                const isFromThisFriend = f._id === newMsg.sender;
+
+                return {
+                    ...f,
+                    lastMessage: {
+                        content: newMsg.content,
+                        createdAt: newMsg.createdAt,
+                        sender: newMsg.sender
+                    },
+                    unreadCount: (isFromThisFriend && !isChattingWithSender)
+                        ? (f.unreadCount || 0) + 1
+                        : f.unreadCount
+                };
+            }));
         };
 
         const onMessagesLoaded = (msgs) => {
@@ -266,6 +293,11 @@ const ChatPage = () => {
     const handleSelectFriend = (friend) => {
         setSelectedFriend(friend);
         socket.emit("getMessages", { withUserId: friend._id });
+        socket.emit("markRead", { fromUserId: friend._id });
+
+        // Clear unread count locally
+        setFriends(prev => prev.map(f => f._id === friend._id ? { ...f, unreadCount: 0 } : f));
+
         setMessages([]);
         setShowRequests(false);
     };
@@ -425,10 +457,31 @@ const ChatPage = () => {
                                                     <div className="flex-1 min-w-0">
                                                         <div className="flex justify-between items-baseline mb-0.5">
                                                             <h3 className="font-semibold text-white truncate">{friend.username}</h3>
+                                                            {friend.lastMessage && (
+                                                                <span className="text-[10px] text-zinc-500 whitespace-nowrap ml-2">
+                                                                    {new Date(friend.lastMessage.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                                </span>
+                                                            )}
                                                         </div>
-                                                        <p className={clsx("text-sm truncate", typingUsers[friend._id] ? "text-violet-400 font-bold animate-pulse" : "text-zinc-400")}>
-                                                            {typingUsers[friend._id] ? "Typing..." : (friend.status || "Hey there! I am using Chat App.")}
-                                                        </p>
+                                                        <div className="flex items-center justify-between gap-2">
+                                                            <p className={clsx("text-sm truncate flex-1", (friend.unreadCount > 0 || typingUsers[friend._id]) ? "text-white font-medium" : "text-zinc-500")}>
+                                                                {typingUsers[friend._id] ? (
+                                                                    <span className="text-violet-400 font-bold animate-pulse">Typing...</span>
+                                                                ) : friend.lastMessage ? (
+                                                                    <>
+                                                                        {friend.lastMessage.sender === currentUser?._id && <span className="text-zinc-600 mr-1">You:</span>}
+                                                                        {friend.lastMessage.content}
+                                                                    </>
+                                                                ) : (
+                                                                    <span className="italic text-zinc-600">No messages yet</span>
+                                                                )}
+                                                            </p>
+                                                            {friend.unreadCount > 0 && (
+                                                                <span className="min-w-[20px] h-5 px-1.5 flex items-center justify-center bg-violet-600 text-[10px] font-bold text-white rounded-full shadow-lg shadow-violet-600/20">
+                                                                    {friend.unreadCount}
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
                                                 </div>
                                             ))}
