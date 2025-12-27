@@ -24,8 +24,16 @@ const ChatPage = () => {
     const [pendingRequests, setPendingRequests] = useState([]);
     const [sentRequests, setSentRequests] = useState([]);
     const [friends, setFriends] = useState([]);
+    const [loadingAction, setLoadingAction] = useState(null);
+    const messagesEndRef = useRef(null);
 
-    // ...
+    const scrollToBottom = () => {
+        messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    };
+
+    useEffect(() => {
+        scrollToBottom();
+    }, [messages]);
 
     const fetchPendingRequests = async () => {
         try {
