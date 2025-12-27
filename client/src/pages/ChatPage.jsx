@@ -103,6 +103,12 @@ const ChatPage = () => {
         fetchPendingRequests();
         fetchFriends();
 
+        // POLL for friend requests every 5 seconds
+        const intervalId = setInterval(() => {
+            fetchPendingRequests();
+            fetchFriends(); // Also refresh friends list to see online status changes or new friends
+        }, 5000);
+
         const onPrivateMessage = (newMsg) => {
             setMessages((prev) => {
                 if (prev.some(m => m._id === newMsg._id)) return prev;
@@ -134,6 +140,7 @@ const ChatPage = () => {
         socket.on("userOffline", onUserOffline);
 
         return () => {
+            clearInterval(intervalId);
             socket.off("messagesLoaded", onMessagesLoaded);
             socket.off("privateMessage", onPrivateMessage);
             socket.off("userOnline", onUserOnline);
