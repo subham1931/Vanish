@@ -34,7 +34,7 @@ router.post("/send-otp", async (req, res) => {
 
         if (!sent) {
             console.warn("OTP sending failed or skipped.");
-            // In production, handle this error
+            return res.status(500).json({ error: "Failed to send OTP email" });
         }
 
         res.json({ message: "OTP sent successfully" });

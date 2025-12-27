@@ -11,7 +11,7 @@ const transporter = nodemailer.createTransport({
 const sendEmail = async (email, otp) => {
     if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
         console.warn("Email credentials not set. OTP:", otp);
-        return true; // Fallback to console success
+        return false;
     }
 
     try {
