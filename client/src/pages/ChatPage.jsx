@@ -60,11 +60,7 @@ const ChatPage = () => {
             // Better: Only if friends.length is 0 AND we haven't shown it yet?
             // For now, let's just trigger it if result is empty.
             if (res.data.length === 0) {
-                // setShowAddFriend(true); // User request: "automatically comes to friend list tab"
-                // Actually, "Friend List Tab" might mean the SIDEBAR LIST.
-                // But if they have no friends, the sidebar shows "No friends yet. Add one now".
-                // I will make it open the "Add Friend" modal to be helpful.
-                setShowAddFriend(true);
+                // setShowAddFriend(true); 
             }
         } catch (err) {
             console.error("Failed to fetch friends", err);
