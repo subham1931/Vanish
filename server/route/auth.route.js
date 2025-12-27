@@ -30,11 +30,11 @@ router.post("/send-otp", async (req, res) => {
         // Save OTP using the store utility
         await saveOTP(email, otp);
 
-        const sent = await sendEmail(email, otp);
+        const emailResult = await sendEmail(email, otp);
 
-        if (!sent) {
-            console.warn("OTP sending failed or skipped.");
-            return res.status(500).json({ error: "Failed to send OTP email" });
+        if (!emailResult.success) {
+            console.warn("OTP sending failed:", emailResult.error);
+            return res.status(500).json({ error: "Failed to send OTP email", details: emailResult.error });
         }
 
         res.json({ message: "OTP sent successfully" });
