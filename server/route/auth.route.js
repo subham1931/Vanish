@@ -61,21 +61,10 @@ router.post("/send-otp", async (req, res) => {
 // 2. Register/Verify OTP and Create Account
 router.post("/register", async (req, res) => {
     try {
-        console.log("Register Request Body:", req.body); // DEBUG LOG
-        const { email: rawEmail, otp, username, password } = req.body;
+        const { email: rawEmail, username, password } = req.body;
 
         if (!rawEmail) return res.status(400).json({ error: "Email is required" });
         const email = rawEmail.toLowerCase();
-
-        /* OTP VERIFICATION DISABLED
-        // Retrieve OTP using the store utility
-        const storedOtp = await getOTP(email);
-        console.log(`Registering ${email}. Input OTP: ${otp}, Stored: ${storedOtp || 'None'}`);
-
-        if (!storedOtp || storedOtp !== otp) {
-            return res.status(401).json({ error: "Invalid or expired OTP" });
-        }
-        */
 
         if (!username || !password) {
             return res.status(400).json({ error: "Username and password are required" });

@@ -61,7 +61,7 @@ export default function AuthPage() {
     // Register Step 2: Verify OTP & Create Account
     const handleRegister = async (e) => {
         e.preventDefault();
-        if (!formData.otp || !formData.username || !formData.password) {
+        if (!formData.username || !formData.email || !formData.password) {
             return setError("All fields are required");
         }
 
@@ -149,60 +149,22 @@ export default function AuthPage() {
                         </motion.form>
                     )}
 
-                    {/* REGISTER FORM - Step 1 (Email) */}
-                    {authMode === "REGISTER" && step === 1 && (
+                    {/* CONSOLIDATED REGISTER FORM (No OTP) */}
+                    {authMode === "REGISTER" && (
                         <motion.form
-                            key="reg-step-1"
+                            key="reg-consolidated"
                             initial={{ opacity: 0, x: -20 }}
                             animate={{ opacity: 1, x: 0 }}
                             exit={{ opacity: 0, x: 20 }}
-                            onSubmit={handleSendOtp}
-                            className="space-y-4"
-                        >
-                            <div className="space-y-2">
-                                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider ml-1">Email Address</label>
-                                <div className="relative group">
-                                    <Mail className="absolute left-3 top-3.5 w-5 h-5 text-slate-500 group-focus-within:text-blue-400 transition-colors" />
-                                    <input type="email" name="email" placeholder="you@example.com" value={formData.email} onChange={handleChange} className="w-full bg-[#334155]/50 border border-slate-600 text-white rounded-xl py-3 pl-10 pr-4 outline-none focus:border-purple-500 focus:bg-[#334155] transition-all" />
-                                </div>
-                            </div>
-                            {error && <p className="text-red-400 text-sm text-center bg-red-400/10 py-2 rounded-lg">{error}</p>}
-                            <button type="submit" disabled={loading} className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3.5 rounded-xl flex items-center justify-center transition-all">
-                                {loading ? <Loader2 className="animate-spin" /> : <>Send OTP <ArrowRight className="ml-2 w-4 h-4" /></>}
-                            </button>
-                        </motion.form>
-                    )}
-
-                    {/* REGISTER FORM - Step 2 (OTP + Details) */}
-                    {authMode === "REGISTER" && step === 2 && (
-                        <motion.form
-                            key="reg-step-2"
-                            initial={{ opacity: 0, x: 20 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            exit={{ opacity: 0, x: -20 }}
                             onSubmit={handleRegister}
                             className="space-y-4"
                         >
-                            <p className="text-sm text-slate-400 text-center">OTP sent to {formData.email}</p>
-
                             <div className="space-y-2">
                                 <label className="text-xs font-medium text-slate-400 uppercase tracking-wider ml-1">Email Address</label>
                                 <div className="relative group">
-                                    <Mail className="absolute left-3 top-3.5 w-5 h-5 text-slate-500 transition-colors" />
-                                    <input
-                                        type="email"
-                                        name="email"
-                                        value={formData.email}
-                                        readOnly
-                                        disabled
-                                        className="w-full bg-[#334155]/30 border border-slate-600 text-slate-400 rounded-xl py-3 pl-10 pr-4 outline-none cursor-not-allowed"
-                                    />
+                                    <Mail className="absolute left-3 top-3.5 w-5 h-5 text-slate-500 group-focus-within:text-purple-400 transition-colors" />
+                                    <input type="email" name="email" placeholder="you@example.com" value={formData.email} onChange={handleChange} className="w-full bg-[#334155]/50 border border-slate-600 text-white rounded-xl py-3 pl-10 pr-4 outline-none focus:border-purple-500 focus:bg-[#334155] transition-all" />
                                 </div>
-                            </div>
-
-                            <div className="space-y-2">
-                                <label className="text-xs font-medium text-slate-400 uppercase tracking-wider ml-1">OTP Code</label>
-                                <input type="text" name="otp" placeholder="123456" value={formData.otp} onChange={handleChange} className="w-full bg-[#334155]/50 border border-slate-600 text-white rounded-xl py-3 px-4 text-center tracking-widest outline-none focus:border-purple-500" />
                             </div>
 
                             <div className="space-y-2">
@@ -222,11 +184,9 @@ export default function AuthPage() {
                             </div>
 
                             {error && <p className="text-red-400 text-sm text-center bg-red-400/10 py-2 rounded-lg">{error}</p>}
-
-                            <button type="submit" disabled={loading} className="w-full bg-emerald-500 hover:bg-emerald-400 text-white font-bold py-3.5 rounded-xl flex items-center justify-center transition-all">
-                                {loading ? <Loader2 className="animate-spin" /> : "Complete Registration"}
+                            <button type="submit" disabled={loading} className="w-full bg-purple-600 hover:bg-purple-500 text-white font-bold py-3.5 rounded-xl flex items-center justify-center transition-all">
+                                {loading ? <Loader2 className="animate-spin" /> : "Sign Up"}
                             </button>
-                            <button type="button" onClick={() => setStep(1)} className="w-full text-slate-400 hover:text-white text-xs mt-2">Back to Email</button>
                         </motion.form>
                     )}
                 </AnimatePresence>
