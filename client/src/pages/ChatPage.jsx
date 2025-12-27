@@ -207,10 +207,12 @@ const ChatPage = () => {
     // 2. Socket Event Listeners Effect (Runs when dependencies change)
     useEffect(() => {
         const onPrivateMessage = (newMsg) => {
-            setMessages((prev) => {
-                if (prev.some(m => m._id === newMsg._id)) return prev;
-                return [...prev, newMsg];
-            });
+            if (selectedFriend && (newMsg.sender === selectedFriend._id || newMsg.receiver === selectedFriend._id)) {
+                setMessages((prev) => {
+                    if (prev.some(m => m._id === newMsg._id)) return prev;
+                    return [...prev, newMsg];
+                });
+            }
         };
 
         const onMessagesLoaded = (msgs) => {
