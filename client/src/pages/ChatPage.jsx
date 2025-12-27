@@ -81,11 +81,37 @@ const ChatPage = () => {
         setLoadingAction(identifier);
         try {
             await api.post("/friends/send", { identifier });
-            alert("Request Sent!");
-            setSearchResults(prev => prev.filter(u => u.username !== identifier && u.phone !== identifier));
-            setShowAddFriend(false);
+            // alert("Request Sent!"); // Optional
+
+            // Update local state to show "pending" status immediately
+            setSearchResults(prev => prev.map(u => {
+                if (u.username === identifier || u.email === identifier) {
+                    return { ...u, status: "pending" };
+                }
+                return u;
+            }));
+
+            // setShowAddFriend(false); 
         } catch (err) {
             alert(err.response?.data?.error || "Failed to send request");
+        } finally {
+            setLoadingAction(null);
+        }
+    };
+
+    const cancelFriendRequest = async (receiverId) => {
+        setLoadingAction(receiverId);
+        try {
+            await api.post("/friends/cancel", { receiverId });
+            // Update local state to show "Add" button again
+            setSearchResults(prev => prev.map(u => {
+                if (u._id === receiverId) {
+                    return { ...u, status: "none" }; // or delete status
+                }
+                return u;
+            }));
+        } catch (err) {
+            console.error(err);
         } finally {
             setLoadingAction(null);
         }
@@ -483,13 +509,28 @@ const ChatPage = () => {
                                                 <p className="text-xs text-zinc-400 truncate">{user.email}</p>
                                             </div>
                                         </div>
-                                        <button
-                                            onClick={() => sendFriendRequest(user.email)}
-                                            disabled={loadingAction === user.email}
-                                            className="bg-zinc-700 text-white hover:bg-violet-600 px-4 py-2 rounded-xl text-xs font-bold transition-colors"
-                                        >
-                                            {loadingAction === user.email ? "..." : "Add"}
-                                        </button>
+                                        {/* Button Logic Based on Status */}
+                                        {user.status === "friend" ? (
+                                            <button disabled className="bg-zinc-800 text-zinc-500 px-4 py-2 rounded-xl text-xs font-bold cursor-default">
+                                                Friend
+                                            </button>
+                                        ) : user.status === "pending" ? (
+                                            <button
+                                                onClick={() => cancelFriendRequest(user._id)} // Call Cancel
+                                                disabled={loadingAction === user._id}
+                                                className="bg-red-600/20 text-red-500 hover:bg-red-600 hover:text-white px-4 py-2 rounded-xl text-xs font-bold transition-colors"
+                                            >
+                                                {loadingAction === user._id ? "..." : "Cancel"}
+                                            </button>
+                                        ) : (
+                                            <button
+                                                onClick={() => sendFriendRequest(user.email)}
+                                                disabled={loadingAction === user.email}
+                                                className="bg-zinc-700 text-white hover:bg-violet-600 px-4 py-2 rounded-xl text-xs font-bold transition-colors"
+                                            >
+                                                {loadingAction === user.email ? "..." : "Add"}
+                                            </button>
+                                        )}
                                     </div>
                                 ))}
                             </div>

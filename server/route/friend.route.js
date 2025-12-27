@@ -118,15 +118,18 @@ router.post("/respond", auth, async (req, res) => {
 });
 
 // Search Users to friend
-router.get("/search", auth, async (req, res) => { // No changes needed here, just kept for context if needed or simple replace
+router.get("/search", auth, async (req, res) => {
     try {
         const { q } = req.query;
         if (!q) return res.json([]);
 
+        const senderId = req.user.userId;
+
         // Find users matching email or username, excluding self
+        // We need 'friendRequests' and 'friends' fields to determine status
         const users = await User.find({
             $and: [
-                { _id: { $ne: req.user.userId } },
+                { _id: { $ne: senderId } },
                 {
                     $or: [
                         { username: { $regex: q, $options: "i" } },
@@ -134,9 +137,56 @@ router.get("/search", auth, async (req, res) => { // No changes needed here, jus
                     ]
                 }
             ]
-        }).select("username email avatar");
+        }).select("username email avatar friendRequests friends");
 
-        res.json(users);
+        const results = users.map(u => {
+            let status = "none";
+            if (u.friends.includes(senderId)) {
+                status = "friend";
+            } else if (u.friendRequests.includes(senderId)) {
+                status = "pending"; // Sent
+            }
+
+            // Also check if *they* sent *me* a request (Receiver perspective)
+            // But for "Add Friend" modal, usually we just care if we can add them.
+            // If they sent me a request, I should probably Accept it, but "Add" works too if logic handles it.
+            // For now, simple logic.
+
+            return {
+                _id: u._id,
+                username: u.username,
+                email: u.email,
+                avatar: u.avatar,
+                status // 'friend', 'pending', 'none'
+            };
+        });
+
+        res.json(results);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Cancel Sent Request
+router.post("/cancel", auth, async (req, res) => {
+    try {
+        const { receiverId } = req.body;
+        const senderId = req.user.userId;
+
+        if (!receiverId) return res.status(400).json({ error: "Receiver ID required" });
+
+        const targetUser = await User.findById(receiverId);
+        if (!targetUser) return res.status(404).json({ error: "User not found" });
+
+        // Remove sender from target's friendRequests
+        if (targetUser.friendRequests.includes(senderId)) {
+            targetUser.friendRequests = targetUser.friendRequests.filter(id => id.toString() !== senderId);
+            await targetUser.save();
+            return res.json({ message: "Request cancelled" });
+        } else {
+            return res.status(400).json({ error: "No pending request found" });
+        }
+
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
