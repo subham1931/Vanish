@@ -35,6 +35,12 @@ const ChatPage = () => {
         scrollToBottom();
     }, [messages]);
 
+    const handleLogout = () => {
+        localStorage.removeItem("token");
+        localStorage.removeItem("user");
+        navigate("/auth");
+    };
+
     const fetchPendingRequests = async () => {
         try {
             const [pendingRes, sentRes] = await Promise.all([
