@@ -135,11 +135,38 @@ router.post("/login", async (req, res) => {
     }
 });
 
+const multer = require("multer");
+const upload = multer({ storage: multer.memoryStorage() });
+const cloudinary = require("../lib/cloudinary");
+
+const streamUpload = (buffer) => {
+    return new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+            { folder: "chat-app-avatars" },
+            (error, result) => {
+                if (result) {
+                    resolve(result);
+                } else {
+                    reject(error);
+                }
+            }
+        );
+        stream.write(buffer);
+        stream.end();
+    });
+};
+
 // 4. Update Profile
-router.put("/update-profile", auth, async (req, res) => {
+router.put("/update-profile", auth, upload.single("avatar"), async (req, res) => {
     try {
         const userId = req.user.userId;
         const { username, phone, status } = req.body;
+
+        let avatarUrl;
+        if (req.file) {
+            const result = await streamUpload(req.file.buffer);
+            avatarUrl = result.secure_url;
+        }
 
         // Validation (Optional: Check if username is taken if changed)
         if (username) {
@@ -149,15 +176,16 @@ router.put("/update-profile", auth, async (req, res) => {
             }
         }
 
+        const updateData = {
+            ...(username && { username }),
+            ...(phone && { phone }),
+            ...(status && { status }),
+            ...(avatarUrl && { avatar: avatarUrl })
+        };
+
         const updatedUser = await User.findByIdAndUpdate(
             userId,
-            {
-                $set: {
-                    ...(username && { username }),
-                    ...(phone && { phone }),
-                    ...(status && { status })
-                }
-            },
+            { $set: updateData },
             { new: true } // Return updated document
         );
 

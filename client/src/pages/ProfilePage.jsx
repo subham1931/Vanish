@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { ArrowLeft, User, Mail, Phone, Edit2, Save, X, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { ArrowLeft, User, Mail, Phone, Edit2, Save, X, Loader2, Camera } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/axios';
 
@@ -8,6 +8,9 @@ const ProfilePage = () => {
     const [user, setUser] = useState(null);
     const [isEditing, setIsEditing] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
+    const [selectedFile, setSelectedFile] = useState(null);
+    const [previewUrl, setPreviewUrl] = useState(null);
+    const fileInputRef = useRef(null);
     const [formData, setFormData] = useState({
         username: '',
         phone: ''
@@ -31,10 +34,28 @@ const ProfilePage = () => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
     };
 
+    const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setSelectedFile(file);
+            setPreviewUrl(URL.createObjectURL(file));
+        }
+    };
+
     const handleSave = async () => {
         setIsLoading(true);
         try {
-            const res = await api.put("/auth/update-profile", formData);
+            const data = new FormData();
+            data.append("username", formData.username);
+            data.append("phone", formData.phone);
+            if (formData.status) data.append("status", formData.status); // preserve status logic if needed
+            if (selectedFile) {
+                data.append("avatar", selectedFile);
+            }
+
+            const res = await api.put("/auth/update-profile", data, {
+                headers: { "Content-Type": "multipart/form-data" }
+            });
             const updatedUser = { ...user, ...res.data.user };
 
             // Update local state and storage
@@ -42,6 +63,7 @@ const ProfilePage = () => {
             localStorage.setItem("user", JSON.stringify(updatedUser));
 
             setIsEditing(false);
+            setSelectedFile(null); // Clear file selection
             // Optional: Show success toast
         } catch (err) {
             console.error("Update failed", err);
@@ -100,10 +122,32 @@ const ProfilePage = () => {
                 {/* Profile Content */}
                 <div className="px-6 pb-8 -mt-16 flex flex-col items-center">
                     <div className="relative mb-4">
-                        <div className="w-32 h-32 rounded-full bg-[#1e1e1e] p-1.5">
-                            <div className="w-full h-full rounded-full bg-slate-700 flex items-center justify-center text-5xl font-bold text-white overflow-hidden uppercase">
-                                {user?.username?.[0]}
+                        <div className="w-32 h-32 rounded-full bg-[#1e1e1e] p-1.5 relative group">
+                            <div className="w-full h-full rounded-full bg-slate-700 flex items-center justify-center text-5xl font-bold text-white overflow-hidden uppercase relative">
+                                {previewUrl ? (
+                                    <img src={previewUrl} alt="Profile" className="w-full h-full object-cover" />
+                                ) : user?.avatar ? (
+                                    <img src={user.avatar} alt="Profile" className="w-full h-full object-cover" />
+                                ) : (
+                                    user?.username?.[0]
+                                )}
+
+                                {isEditing && (
+                                    <div
+                                        className="absolute inset-0 bg-black/50 flex items-center justify-center cursor-pointer opacity-0 group-hover:opacity-100 transition-opacity"
+                                        onClick={() => fileInputRef.current?.click()}
+                                    >
+                                        <Camera className="w-8 h-8 text-white/80" />
+                                    </div>
+                                )}
                             </div>
+                            <input
+                                type="file"
+                                ref={fileInputRef}
+                                className="hidden"
+                                accept="image/*"
+                                onChange={handleFileChange}
+                            />
                         </div>
                     </div>
 
